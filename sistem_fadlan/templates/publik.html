@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informasi Udara Publik — Kelurahan Buluri</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Font: Inter + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Helper aplikasi (tema Chart.js, fetch API, indikator Live) -->
+    <script src="/static/js/common.js"></script>
+
+    <style>
+        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: .25; }
+        }
+        .live-dot { animation: pulse-dot 2s infinite; }
+
+        /* Latar aurora eco */
+        .aurora {
+            position: fixed; inset: 0; z-index: -10; pointer-events: none;
+            background:
+                radial-gradient(60rem 32rem at 12% -8%,  rgba(16,185,129,0.16), transparent 60%),
+                radial-gradient(52rem 30rem at 92% 8%,   rgba(20,184,166,0.11), transparent 60%),
+                radial-gradient(44rem 26rem at 50% 112%, rgba(132,204,22,0.09), transparent 60%),
+                #020617;
+        }
+
+        /* Kartu glassmorphism */
+        .card-glass {
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        /* Angka instrumen */
+        .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+        .hero-glow { transition: box-shadow .5s ease, border-color .5s ease; }
+
+        @keyframes rise-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .rise-in { animation: rise-in .5s ease both; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Latar aurora -->
+    <div class="aurora"></div>
+
+    <!-- ===== NAVBAR PUBLIK (bersih, tanpa menu admin) ===== -->
+    <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-slate-800/80">
+        <div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+            <!-- Logo / Judul -->
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🌿</span>
+                <div>
+                    <div class="text-sm font-bold bg-gradient-to-r from-emerald-300 to-lime-300 bg-clip-text text-transparent leading-tight">
+                        Kualitas Udara Kelurahan Buluri
+                    </div>
+                    <div class="text-[11px] text-slate-500 leading-tight">Kota Palu, Sulawesi Tengah</div>
+                </div>
+            </div>
+
+            <!-- Status live + tombol login admin (kecil, tidak mencolok) -->
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span id="nav-live-dot" class="live-dot w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                    <span id="nav-live-text">Live</span>
+                </span>
+                <a href="/login"
+                   class="text-[11px] text-slate-600 hover:text-slate-400 transition px-2 py-1 rounded-lg hover:bg-slate-800/60">
+                    Admin
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== KONTEN ===== -->
+    <main class="flex-1 pt-20 pb-8">
+        <div class="max-w-4xl mx-auto px-4">
+
+            <!-- ===== HEADER ===== -->
+            <div class="text-center mb-8 rise-in">
+                <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-4 py-1.5 text-xs text-emerald-400 font-medium mb-4">
+                    <span class="live-dot w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                    Data Langsung dari Sensor Lapangan
+                </div>
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2">
+                    Kualitas Udara
+                    <span class="bg-gradient-to-r from-emerald-300 to-lime-300 bg-clip-text text-transparent">Kelurahan Buluri</span>
+                </h1>
+                <p class="text-slate-400 text-sm max-w-lg mx-auto">
+                    Informasi kondisi udara real-time untuk warga Kelurahan Buluri, Kota Palu.
+                    Diperbarui otomatis setiap 30 detik.
+                </p>
+                <div class="mt-3 text-xs text-slate-500">
+                    🕐 Terakhir diperbarui: <span id="pub-last-update" class="text-slate-300">--</span>
+                </div>
+            </div>
+
+            <!-- ===== HERO: STATUS UDARA UTAMA ===== -->
+            <div id="pub-hero" class="card-glass hero-glow rounded-3xl p-8 mb-6 text-center rise-in transition-all duration-500">
+                <p class="text-xs text-slate-400 uppercase tracking-widest mb-3">Status Udara Saat Ini</p>
+                <div id="pub-status-icon" class="text-7xl mb-4">🌿</div>
+                <div id="pub-status-label" class="text-4xl sm:text-5xl font-extrabold text-white mb-2 tracking-tight">--</div>
+                <div id="pub-status-desc" class="text-slate-400 text-sm max-w-sm mx-auto mb-4">Memuat data sensor...</div>
+                <div id="pub-advice-box" class="hidden mt-4 rounded-2xl px-6 py-4 text-sm font-medium leading-relaxed max-w-md mx-auto">
+                    <div id="pub-advice-text">--</div>
+                </div>
+            </div>
+
+            <!-- ===== KARTU PARAMETER SENSOR ===== -->
+            <h2 class="text-base font-semibold text-slate-300 mb-3 rise-in">📊 Nilai Sensor Sekarang</h2>
+            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+
+                <!-- PM 2.5 -->
+                <div class="card-glass rounded-2xl p-5 rise-in col-span-2 lg:col-span-1">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">PM 2.5</span>
+                        <span class="text-lg">🌫️</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-pm25">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">μg/m³ · Debu Halus</div>
+                    <div class="mt-2 w-full bg-slate-700/50 rounded-full h-1.5">
+                        <div id="pub-bar-pm25" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-700" style="width:0%"></div>
+                    </div>
+                    <div class="text-[10px] text-slate-600 mt-1">Batas aman: 55 μg/m³</div>
+                </div>
+
+                <!-- PM 10 -->
+                <div class="card-glass rounded-2xl p-5 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">PM 10</span>
+                        <span class="text-lg">🌪️</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-pm10">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">μg/m³ · Debu Kasar</div>
+                    <div class="mt-2 w-full bg-slate-700/50 rounded-full h-1.5">
+                        <div id="pub-bar-pm10" class="h-1.5 rounded-full bg-blue-500 transition-all duration-700" style="width:0%"></div>
+                    </div>
+                    <div class="text-[10px] text-slate-600 mt-1">Batas aman: 75 μg/m³</div>
+                </div>
+
+                <!-- PM 1.0 -->
+                <div class="card-glass rounded-2xl p-5 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">PM 1.0</span>
+                        <span class="text-lg">✨</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-pm1">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">μg/m³ · Debu Paling Halus</div>
+                    <div class="mt-2"><span class="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-slate-700/60 text-slate-400">pemantauan saja</span></div>
+                </div>
+
+                <!-- Suhu -->
+                <div class="card-glass rounded-2xl p-5 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">Suhu</span>
+                        <span class="text-lg">🌡️</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-temp">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">°C · Suhu Udara</div>
+                </div>
+
+                <!-- Kelembapan -->
+                <div class="card-glass rounded-2xl p-5 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">Kelembapan</span>
+                        <span class="text-lg">💧</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-hum">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">% · Kelembapan Udara</div>
+                </div>
+
+                <!-- Gas -->
+                <div class="card-glass rounded-2xl p-5 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest">MQ-135</span>
+                        <span class="text-lg">🧪</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-gas">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">ADC · Gas Tercemar</div>
+                </div>
+
+                <!-- Tekanan Udara -->
+                <div class="card-glass rounded-2xl p-5 border-lime-400/40 rise-in">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-lime-300/90 uppercase tracking-widest">Tekanan Udara ✦</span>
+                        <span class="text-lg">🔵</span>
+                    </div>
+                    <div class="num text-4xl font-bold text-white" id="pub-press">--</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">hPa · Tekanan Barometrik</div>
+                </div>
+            </div>
+
+            <!-- ===== TREN 24 JAM ===== -->
+            <div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+                <h2 class="text-sm font-semibold text-slate-300 mb-1">📈 Tren PM 2.5 — 24 Jam Terakhir</h2>
+                <p class="text-xs text-slate-500 mb-4">Grafik kondisi udara hari ini. Semakin rendah angkanya, semakin bersih udaranya.</p>
+                <div class="relative h-52">
+                    <canvas id="pub-chart-pm25"></canvas>
+                </div>
+            </div>
+
+            <!-- ===== PANDUAN STATUS ===== -->
+            <div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+                <h2 class="text-sm font-semibold text-slate-300 mb-1">🎨 Panduan Status Udara</h2>
+                <p class="text-xs text-slate-500 mb-4">Berdasarkan standar ISPU KLHK — PermenLHK No. 14 Tahun 2020</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div class="rounded-xl bg-green-500/10 border border-green-500/30 p-4">
+                        <div class="text-2xl mb-2">🟢</div>
+                        <div class="text-green-400 font-bold text-sm mb-1">BAIK</div>
+                        <div class="text-xs text-slate-400 mb-2">Udara bersih, aman untuk semua aktivitas di luar ruangan.</div>
+                        <div class="text-[10px] text-slate-500">PM2.5: 0–15.5 µg/m³</div>
+                        <div class="text-[10px] text-slate-500">PM10: 0–50 µg/m³</div>
+                    </div>
+                    <div class="rounded-xl bg-blue-500/10 border border-blue-500/30 p-4">
+                        <div class="text-2xl mb-2">🔵</div>
+                        <div class="text-blue-400 font-bold text-sm mb-1">SEDANG</div>
+                        <div class="text-xs text-slate-400 mb-2">Masih aman. Kelompok sensitif sebaiknya batasi aktivitas berat di luar.</div>
+                        <div class="text-[10px] text-slate-500">PM2.5: 15.6–55.4 µg/m³</div>
+                        <div class="text-[10px] text-slate-500">PM10: 51–150 µg/m³</div>
+                    </div>
+                    <div class="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+                        <div class="text-2xl mb-2">🟡</div>
+                        <div class="text-yellow-400 font-bold text-sm mb-1">TIDAK SEHAT</div>
+                        <div class="text-xs text-slate-400 mb-2">Gunakan masker saat keluar. Hindari olahraga berat di luar ruangan.</div>
+                        <div class="text-[10px] text-slate-500">PM2.5: 55.5–150.4 µg/m³</div>
+                        <div class="text-[10px] text-slate-500">PM10: 151–350 µg/m³</div>
+                    </div>
+                    <div class="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
+                        <div class="text-2xl mb-2">🔴</div>
+                        <div class="text-red-400 font-bold text-sm mb-1">SANGAT TIDAK SEHAT</div>
+                        <div class="text-xs text-slate-400 mb-2">Hindari aktivitas luar ruangan. Wajib masker. Waspada penderita asma.</div>
+                        <div class="text-[10px] text-slate-500">PM2.5: 150.5–250.4 µg/m³</div>
+                        <div class="text-[10px] text-slate-500">PM10: 351–420 µg/m³</div>
+                    </div>
+                    <div class="rounded-xl bg-gray-500/10 border border-gray-500/30 p-4">
+                        <div class="text-2xl mb-2">⚫</div>
+                        <div class="text-gray-400 font-bold text-sm mb-1">BERBAHAYA</div>
+                        <div class="text-xs text-slate-400 mb-2">Tetap di dalam ruangan. Darurat kesehatan. Segera hubungi tenaga medis.</div>
+                        <div class="text-[10px] text-slate-500">PM2.5: &gt; 250.5 µg/m³</div>
+                        <div class="text-[10px] text-slate-500">PM10: &gt; 420 µg/m³</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== INFO SENSOR & LOKASI ===== -->
+            <div class="card-glass rounded-2xl p-5 mb-4 rise-in">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3">📍 Tentang Sensor Ini</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="text-xl">📌</span>
+                        <div>
+                            <div class="text-slate-300 font-medium">Lokasi Sensor</div>
+                            <div class="text-slate-500 text-xs">Kelurahan Buluri, Kota Palu, Sulawesi Tengah</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-xl">⏱️</span>
+                        <div>
+                            <div class="text-slate-300 font-medium">Interval Pengukuran</div>
+                            <div class="text-slate-500 text-xs">Setiap 30 detik, otomatis</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-xl">🔬</span>
+                        <div>
+                            <div class="text-slate-300 font-medium">Sensor yang Digunakan</div>
+                            <div class="text-slate-500 text-xs">PMS5003 (debu), BME280 (suhu/tekanan), MQ-135 (gas)</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-xl">📋</span>
+                        <div>
+                            <div class="text-slate-300 font-medium">Acuan Standar</div>
+                            <div class="text-slate-500 text-xs">Baku mutu udara PP No. 22 Tahun 2021 (Nasional)</div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-600 mt-4 border-t border-slate-700/50 pt-3">
+                    ⚠️ Data ini bersifat informatif. Untuk keputusan medis, konsultasikan dengan tenaga kesehatan.
+                    Sistem ini bagian dari penelitian skripsi Moh. Fadlan Darul Aksa Nusu — STMIK Bina Mulia Palu.
+                </p>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="border-t border-slate-700 py-4 text-center text-xs text-slate-500">
+        Pemantau Kualitas Udara Kelurahan Buluri · Skripsi Moh. Fadlan Darul Aksa Nusu · STMIK Bina Mulia Palu
+    </footer>
+
+    <!-- Banner error koneksi -->
+    <div id="api-banner" class="hidden fixed top-16 inset-x-0 z-40 bg-amber-900/90 border-b border-amber-500 text-amber-100 text-sm text-center py-2">
+        ⚠️ Tidak dapat terhubung ke server — mencoba lagi otomatis...
+    </div>
+
+    <script>
+    // ===== KONFIGURASI STATUS =====
+    const STATUS_CFG = {
+        'BAIK':        { icon: '🌿', color: '#22c55e', textClass: 'text-green-400',  adviceBg: 'bg-green-500/10 border border-green-500/30 text-green-300',   glow: '0 0 60px rgba(34,197,94,.2)',   desc: 'Udara bersih dan segar. Aman untuk semua aktivitas.' },
+        'SEDANG':      { icon: '🌤️', color: '#eab308', textClass: 'text-yellow-400', adviceBg: 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-200', glow: '0 0 60px rgba(234,179,8,.2)',   desc: 'Kualitas udara masih dapat diterima. Kelompok sensitif perlu waspada.' },
+        'TIDAK SEHAT': { icon: '😷', color: '#f97316', textClass: 'text-orange-400', adviceBg: 'bg-orange-500/10 border border-orange-500/30 text-orange-200', glow: '0 0 60px rgba(249,115,22,.2)',  desc: 'Kualitas udara buruk. Disarankan mengurangi aktivitas di luar.' },
+        'BERBAHAYA':   { icon: '🚨', color: '#ef4444', textClass: 'text-red-400',    adviceBg: 'bg-red-500/10 border border-red-500/30 text-red-200',          glow: '0 0 60px rgba(239,68,68,.25)', desc: 'Kualitas udara sangat berbahaya. Hindari aktivitas luar ruangan.' }
+    };
+
+    const ADVICE_MAP = {
+        'BAIK':        '✅ Aman untuk aktivitas di luar ruangan. Nikmati udara segar Kelurahan Buluri hari ini!',
+        'SEDANG':      '⚠️ Masih aman untuk aktivitas normal. Penderita asma, lansia, dan anak-anak sebaiknya tidak terlalu lama beraktivitas berat di luar ruangan.',
+        'TIDAK SEHAT': '😷 Gunakan masker saat keluar rumah. Kurangi olahraga atau aktivitas berat di luar. Tutup ventilasi rumah bila memungkinkan.',
+        'BERBAHAYA':   '🚨 Tetap di dalam ruangan sebisa mungkin. Wajib menggunakan masker bila terpaksa keluar. Penderita penyakit pernapasan dan jantung harap ekstra berhati-hati.'
+    };
+
+    // ===== CHART TREN =====
+    const pubChart = new Chart(document.getElementById('pub-chart-pm25'), {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: baseLineOpts({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ' PM2.5: ' + ctx.parsed.y.toFixed(1) + ' μg/m³'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { callback: v => v + ' μg' }
+                },
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }
+            }
+        })
+    });
+
+    // ===== UPDATE HERO STATUS =====
+    function updateHero(pm25, pm10) {
+        const st = aqStatus(pm25, pm10);
+        const cfg = STATUS_CFG[st.label];
+        if (!cfg) return;
+
+        const hero = document.getElementById('pub-hero');
+        document.getElementById('pub-status-icon').textContent  = cfg.icon;
+        document.getElementById('pub-status-label').textContent = st.label;
+        document.getElementById('pub-status-label').className   = 'text-4xl sm:text-5xl font-extrabold mb-2 tracking-tight ' + cfg.textClass;
+        document.getElementById('pub-status-desc').textContent  = cfg.desc;
+
+        hero.style.boxShadow   = cfg.glow;
+        hero.style.borderColor = cfg.color + '55';
+
+        const adviceBox  = document.getElementById('pub-advice-box');
+        const adviceText = document.getElementById('pub-advice-text');
+        adviceText.innerHTML = ADVICE_MAP[st.label] || '--';
+        adviceBox.className  = 'mt-4 rounded-2xl px-6 py-4 text-sm font-medium leading-relaxed max-w-md mx-auto ' + cfg.adviceBg;
+        adviceBox.classList.remove('hidden');
+    }
+
+    // ===== BAR PROGRESS =====
+    function updateBar(barId, value, max, colorClass) {
+        const bar = document.getElementById(barId);
+        if (!bar) return;
+        bar.style.width = Math.min(value / max * 100, 100).toFixed(1) + '%';
+        if (value >= max)           bar.className = 'h-1.5 rounded-full bg-red-500 transition-all duration-700';
+        else if (value >= max * .7) bar.className = 'h-1.5 rounded-full bg-orange-500 transition-all duration-700';
+        else if (value >= max * .4) bar.className = 'h-1.5 rounded-full bg-yellow-500 transition-all duration-700';
+        else                        bar.className = 'h-1.5 rounded-full ' + colorClass + ' transition-all duration-700';
+    }
+
+    // ===== LOAD DATA REALTIME =====
+    async function loadPublikRealtime() {
+        const resp = await fetchJSON('/api/realtime');
+        if (!resp) return;
+
+        if (resp.status === 'no_data') {
+            document.getElementById('pub-status-icon').textContent  = '📡';
+            document.getElementById('pub-status-label').textContent = 'Menunggu Data';
+            document.getElementById('pub-status-desc').textContent  = 'Sensor belum mengirimkan data. Pastikan alat menyala.';
+            document.getElementById('pub-last-update').textContent  = 'Belum ada data';
+            return;
+        }
+
+        const d = resp.data;
+        setCard('pub-pm25', d.pm25);
+        setCard('pub-pm10', d.pm10);
+        setCard('pub-pm1',  d.pm1_0);
+        setCard('pub-temp', d.temperature);
+        setCard('pub-hum',  d.humidity);
+        setCard('pub-gas',  d.gas_raw, 0);
+        setCard('pub-press',d.pressure);
+
+        if (d.pm25 != null) updateBar('pub-bar-pm25', d.pm25, 55, 'bg-emerald-500');
+        if (d.pm10 != null) updateBar('pub-bar-pm10', d.pm10, 75, 'bg-blue-500');
+
+        updateHero(d.pm25, d.pm10);
+        document.getElementById('pub-last-update').textContent = fmtDateTime(d.timestamp) + ' WITA';
+    }
+
+    // ===== LOAD CHART TREN 24 JAM =====
+    async function loadPublikChart() {
+        const resp = await fetchJSON('/api/chart-data?limit=2880');
+        if (!resp || resp.status === 'no_data' || !resp.data.length) {
+            toggleChartEmpty('pub-chart-pm25', true, 'Belum ada data tren — sensor belum aktif');
+            return;
+        }
+
+        const labels = resp.data.map(r => fmtTime(r.timestamp));
+        const values = resp.data.map(r => r.pm25);
+
+        pubChart.data = {
+            labels,
+            datasets: [
+                {
+                    label: 'PM 2.5',
+                    data: values,
+                    borderColor: 'rgba(52, 211, 153, 1)',
+                    backgroundColor: 'rgba(52, 211, 153, 0.08)',
+                    fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2
+                },
+                thresholdDataset('Batas Aman (55 μg/m³)', 55, 'rgba(239,68,68,0.6)', values.length)
+            ]
+        };
+        pubChart.update();
+        toggleChartEmpty('pub-chart-pm25', false);
+    }
+
+    // ===== INIT & AUTO-REFRESH =====
+    loadPublikRealtime();
+    loadPublikChart();
+    setInterval(loadPublikRealtime, 30000);
+    setInterval(loadPublikChart, 300000);
+
+    // Polling status live (indikator ● di navbar)
+    startStatusPolling(30000);
+    </script>
+
+</body>
+</html>

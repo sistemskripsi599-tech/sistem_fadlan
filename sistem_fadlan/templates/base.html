@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} — Admin Kualitas Udara Kelurahan Buluri</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Font: Inter (UI) + JetBrains Mono (angka instrumen) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Helper aplikasi (tema Chart.js, fetch API, indikator Live) -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+
+    <style>
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: .25; }
+        }
+        .live-dot { animation: pulse-dot 2s infinite; }
+
+        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+        .aurora {
+            position: fixed; inset: 0; z-index: -10; pointer-events: none;
+            background:
+                radial-gradient(60rem 32rem at 12% -8%,  rgba(16,185,129,0.16), transparent 60%),
+                radial-gradient(52rem 30rem at 92% 8%,   rgba(20,184,166,0.11), transparent 60%),
+                radial-gradient(44rem 26rem at 50% 112%, rgba(132,204,22,0.09), transparent 60%),
+                #020617;
+        }
+
+        .card-glass {
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+        .hero-glow { transition: box-shadow .5s ease, border-color .5s ease; }
+        .chip { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+
+        @keyframes rise-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .rise-in { animation: rise-in .5s ease both; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <div class="aurora"></div>
+
+    <!-- ===== NAVBAR ADMIN ===== -->
+    <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+
+            <!-- Logo -->
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🌿</span>
+                <div>
+                    <div class="text-sm font-bold bg-gradient-to-r from-emerald-300 to-lime-300 bg-clip-text text-transparent leading-tight">
+                        Kualitas Udara Kelurahan Buluri
+                    </div>
+                    <div class="text-[11px] text-slate-500 leading-tight">Kota Palu, Sulawesi Tengah</div>
+                </div>
+            </div>
+
+            <!-- Menu desktop (khusus admin) -->
+            <div class="hidden md:flex items-center gap-6 text-sm font-medium">
+                <a href="/dashboard"  class="{% if active == 'dashboard'  %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">Dashboard</a>
+                <a href="/monitoring" class="{% if active == 'monitoring' %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">Monitoring</a>
+                <a href="/prediction" class="{% if active == 'prediction' %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">Prediksi</a>
+                <a href="/evaluation" class="{% if active == 'evaluation' %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">Evaluasi</a>
+                <a href="/history"    class="{% if active == 'history'    %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">Riwayat</a>
+                <a href="/admin"      class="{% if active == 'admin'      %}text-emerald-400{% else %}text-slate-300 hover:text-white{% endif %} transition">⚙️ Admin</a>
+            </div>
+
+            <!-- Kanan: status live + logout -->
+            <div class="flex items-center gap-4">
+                <span class="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+                    <span id="nav-live-dot" class="live-dot w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                    <span id="nav-live-text">Live</span>
+                </span>
+                <button id="btn-glossary" class="hidden md:inline-block text-xs font-medium text-emerald-300 hover:text-emerald-200 border border-emerald-500/40 rounded-full px-3 py-1 transition">Apa ini?</button>
+                <a href="/logout" class="hidden md:inline-block text-xs font-medium text-slate-400 hover:text-red-400 border border-slate-700 rounded-full px-3 py-1 transition">⎋ Logout</a>
+                <button id="btn-menu" class="md:hidden text-slate-300 hover:text-white" aria-label="Menu">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Drawer mobile (khusus admin) -->
+        <div id="mobile-menu" class="hidden md:hidden border-t border-slate-700 bg-slate-900 px-4 py-3 space-y-2 text-sm font-medium">
+            <a href="/dashboard"  class="block py-2 {% if active == 'dashboard'  %}text-emerald-400{% else %}text-slate-300{% endif %}">Dashboard</a>
+            <a href="/monitoring" class="block py-2 {% if active == 'monitoring' %}text-emerald-400{% else %}text-slate-300{% endif %}">Monitoring</a>
+            <a href="/prediction" class="block py-2 {% if active == 'prediction' %}text-emerald-400{% else %}text-slate-300{% endif %}">Prediksi</a>
+            <a href="/evaluation" class="block py-2 {% if active == 'evaluation' %}text-emerald-400{% else %}text-slate-300{% endif %}">Evaluasi</a>
+            <a href="/history"    class="block py-2 {% if active == 'history'    %}text-emerald-400{% else %}text-slate-300{% endif %}">Riwayat</a>
+            <a href="/admin"      class="block py-2 {% if active == 'admin'      %}text-emerald-400{% else %}text-slate-300{% endif %}">⚙️ Admin</a>
+            <div class="border-t border-slate-700 pt-2 mt-1">
+                <a href="/logout" class="block py-2 text-red-400">⎋ Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    {% if data_mode == 'simulasi' %}
+    <div class="fixed top-16 inset-x-0 z-40 bg-amber-950/85 border-b border-amber-500/60 text-amber-100 text-xs text-center py-1.5 px-4 backdrop-blur">
+        🧪 <strong>MODE SIMULASI</strong> — angka yang tampil adalah <strong>data pengujian buatan</strong>, <strong>bukan data alat</strong>. Ganti ke <code class="bg-slate-900/80 px-1 rounded">DATA_MODE = "lapangan"</code> untuk data asli.
+    </div>
+    {% endif %}
+
+    <!-- Modal kamus istilah -->
+    <div id="glossary" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/70" id="glossary-close"></div>
+        <div class="relative max-w-lg w-full rounded-xl border border-slate-700 bg-slate-800 shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+            <h2 class="text-lg font-bold text-white mb-3">Apa-apaan ini? (penjelasan sederhana)</h2>
+            <div class="text-sm text-slate-300 space-y-3">
+                <p><strong class="text-emerald-400">Alat</strong> — kotak berisi 3 sensor yang ditaruh di lokasi penelitian (Kelurahan Buluri, Kota Palu). Tugasnya cuma satu: mengukur udara dan mengirim angkanya ke laptop tiap 30 detik.</p>
+                <p><strong class="text-emerald-400">Debu Halus (PM2.5)</strong> — debu sangat kecil dari asap kendaraan, tidak terlihat mata tetapi masuk ke paru-paru. Satuannya mikrogram per meter kubik.</p>
+                <p><strong class="text-emerald-400">Debu Kasar (PM10)</strong> — debu jalan dan serbuk yang terlihat mata. Batas aman: PM2.5 = 55, PM10 = 75 (PP No. 22 tahun 2021).</p>
+                <p><strong class="text-emerald-400">Status udara (4 tingkat)</strong> — BAIK, SEDANG, TIDAK SEHAT, BERBAHAYA. Ditentukan oleh PM2.5 DAN PM10 — yang lebih buruk yang dipakai.</p>
+                <p><strong class="text-emerald-400">MAE, RMSE, R²</strong> — tiga angka untuk menilai ketepatan ramalan. MAE = rata-rata meleset, RMSE = seperti MAE tapi kesalahan besar dihukum lebih berat, R² = 0–1 (makin dekat 1 makin baik).</p>
+                <p><strong class="text-emerald-400">Ramalan 24 jam</strong> — Random Forest (100 pohon keputusan) mempelajari pola data lama lalu menebak udara 24 jam ke depan.</p>
+            </div>
+            <button id="glossary-btn-close" class="mt-5 w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Mengerti</button>
+        </div>
+    </div>
+
+    <div id="api-banner" class="hidden fixed top-16 inset-x-0 z-40 bg-amber-900/90 border-b border-amber-500 text-amber-100 text-sm text-center py-2">
+        ⚠️ Tidak dapat terhubung ke server — mencoba lagi otomatis...
+    </div>
+
+    <!-- ===== KONTEN ===== -->
+    <main class="flex-1 pt-20 pb-8">
+        <div class="max-w-7xl mx-auto px-4">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="border-t border-slate-700 py-4 text-center text-xs text-slate-500">
+        Kualitas Udara Kelurahan Buluri — Monitoring &amp; Prediksi Berbasis IoT · Skripsi Moh. Fadlan Darul Aksa Nusu · STMIK Bina Mulia Palu
+    </footer>
+
+    <script>
+        document.getElementById('btn-menu').addEventListener('click', () => {
+            document.getElementById('mobile-menu').classList.toggle('hidden');
+        });
+
+        const glossary = document.getElementById('glossary');
+        document.getElementById('btn-glossary').addEventListener('click', () => glossary.classList.remove('hidden'));
+        document.getElementById('glossary-close').addEventListener('click', () => glossary.classList.add('hidden'));
+        document.getElementById('glossary-btn-close').addEventListener('click', () => glossary.classList.add('hidden'));
+
+        startStatusPolling(30000);
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

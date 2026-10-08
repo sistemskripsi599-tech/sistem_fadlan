@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% block title %}Evaluasi Model{% endblock %}
+
+{% block content %}
+
+<!-- ===== HEADER ===== -->
+<div class="mb-6 rise-in">
+    <h1 class="text-2xl font-bold text-white">📊 Evaluasi Model Prediksi</h1>
+    <p class="text-sm text-slate-400 mt-1">Seberapa akurat tebakan komputer terhadap kualitas udara?</p>
+</div>
+
+<!-- ===== SECTION 1: INFO TRAINING ===== -->
+<div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Informasi Pelatihan Model</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="rounded-xl bg-slate-800/50 px-4 py-3">
+            <div class="text-xs text-slate-500 mb-1">🕐 Terakhir Dilatih</div>
+            <div id="info-trained" class="text-sm font-semibold text-slate-100">--</div>
+        </div>
+        <div class="rounded-xl bg-slate-800/50 px-4 py-3">
+            <div class="text-xs text-slate-500 mb-1">📂 Bahan Latihan</div>
+            <div class="text-sm font-semibold text-slate-100">Data latihan + angka alat di Buluri</div>
+        </div>
+        <div class="rounded-xl bg-slate-800/50 px-4 py-3">
+            <div class="text-xs text-slate-500 mb-1">🎯 Yang Diprediksi</div>
+            <div class="text-sm font-semibold text-slate-100">PM 2.5 · PM 10 · MQ-135 (24 jam ke depan)</div>
+        </div>
+        <div class="rounded-xl bg-slate-800/50 px-4 py-3">
+            <div class="text-xs text-slate-500 mb-1">🌲 Metode</div>
+            <div class="text-sm font-semibold text-slate-100">Random Forest — 100 pohon keputusan</div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== INFO: BELUM DILATIH ===== -->
+<div id="metrics-empty" class="hidden rounded-2xl border border-amber-500/70 bg-amber-950/50 backdrop-blur p-5 mb-6 text-sm text-amber-100 rise-in">
+    ℹ️ <strong>Komputer belum diajari.</strong>
+    Jalankan <code class="bg-slate-900 px-2 py-0.5 rounded font-mono text-xs">python train_model.py</code>
+    satu kali agar angka keakuratan muncul di sini.
+</div>
+
+<!-- ===== SECTION 2: TABEL METRIK ===== -->
+<div class="card-glass rounded-2xl overflow-hidden mb-6 rise-in">
+    <div class="px-5 py-4 border-b border-slate-700/60">
+        <h2 class="text-base font-bold text-white">Seberapa Tepat Tebakan Komputer?</h2>
+        <p class="text-xs text-slate-500 mt-1">
+            Dihitung dengan membandingkan hasil tebakan terhadap kejadian nyata pada
+            <strong class="text-slate-400">20% data ujian</strong> yang tidak dipakai saat melatih.
+        </p>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-slate-800/80 text-slate-300 text-left text-xs uppercase tracking-wider">
+                    <th class="px-5 py-3 font-semibold">Parameter yang Ditebak</th>
+                    <th class="px-5 py-3 font-semibold" title="Rata-rata selisih tebakan vs kenyataan">
+                        MAE
+                        <span class="block text-[10px] text-slate-500 normal-case tracking-normal font-normal">Selisih rata-rata</span>
+                    </th>
+                    <th class="px-5 py-3 font-semibold" title="Kesalahan besar diberi bobot lebih berat">
+                        RMSE
+                        <span class="block text-[10px] text-slate-500 normal-case tracking-normal font-normal">Kesalahan berbobot</span>
+                    </th>
+                    <th class="px-5 py-3 font-semibold" title="Semakin mendekati 1 semakin baik">
+                        R²
+                        <span class="block text-[10px] text-slate-500 normal-case tracking-normal font-normal">Skor 0 – 1</span>
+                    </th>
+                    <th class="px-5 py-3 font-semibold">Kesimpulan</th>
+                </tr>
+            </thead>
+            <tbody id="metrics-tbody" class="divide-y divide-slate-700/40"></tbody>
+        </table>
+    </div>
+
+    <!-- Catatan bawah tabel -->
+    <div class="px-5 py-4 border-t border-slate-700/60 bg-slate-800/30">
+        <p class="text-xs text-slate-400 leading-relaxed">
+            ℹ️ <strong class="text-slate-300">Kenapa nilainya belum optimal?</strong><br>
+            Angka di atas dihitung dari <em>data pengembangan</em> (file latihan awal + sebagian kecil data alat).
+            Model akan jauh lebih akurat setelah dilatih ulang dengan <strong class="text-slate-300">data lapangan Buluri yang penuh</strong>
+            — caranya: nyalakan alat → tunggu data terkumpul → ubah
+            <code class="bg-slate-900 px-1.5 py-0.5 rounded text-[11px] font-mono">DATA_MODE = "lapangan"</code>
+            → jalankan ulang <code class="bg-slate-900 px-1.5 py-0.5 rounded text-[11px] font-mono">python train_model.py</code>.
+            <br><span class="text-slate-500 mt-1 block">
+                ⚠️ Khusus MQ-135: data latihan awal tidak memiliki kolom gas,
+                sehingga model gas baru bermakna setelah data sensor alat terkumpul.
+            </span>
+        </p>
+    </div>
+</div>
+
+<!-- ===== SECTION 3: PENJELASAN METRIK ===== -->
+<div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+    <h2 class="text-base font-bold text-white mb-4">Arti Angka-Angkanya (Bahasa Sederhana)</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div class="rounded-xl bg-slate-800/50 p-4 border border-slate-700/50">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-lg">📏</span>
+                <span class="text-sm font-bold text-emerald-300">MAE — Mean Absolute Error</span>
+            </div>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Rata-rata selisih antara tebakan dan kejadian nyata.
+            </p>
+            <p class="text-xs text-slate-500 mt-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                Contoh: MAE = 3 berarti tebakan komputer meleset rata-rata <strong class="text-slate-300">3 μg/m³</strong>.
+                Semakin kecil angkanya, semakin bagus.
+            </p>
+        </div>
+
+        <div class="rounded-xl bg-slate-800/50 p-4 border border-slate-700/50">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-lg">📐</span>
+                <span class="text-sm font-bold text-blue-300">RMSE — Root Mean Square Error</span>
+            </div>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Seperti MAE, tapi kesalahan besar dihukum lebih berat.
+            </p>
+            <p class="text-xs text-slate-500 mt-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                Jika RMSE jauh lebih besar dari MAE, berarti ada beberapa tebakan yang meleset sangat jauh.
+                Semakin kecil, semakin bagus.
+            </p>
+        </div>
+
+        <div class="rounded-xl bg-slate-800/50 p-4 border border-slate-700/50">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-lg">🎯</span>
+                <span class="text-sm font-bold text-purple-300">R² — Koefisien Determinasi</span>
+            </div>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Menunjukkan seberapa paham komputer terhadap pola data.
+            </p>
+            <p class="text-xs text-slate-500 mt-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                <strong class="text-green-400">R² = 1.0</strong> → sempurna ·
+                <strong class="text-yellow-400">R² = 0.7</strong> → cukup baik ·
+                <strong class="text-red-400">R² &lt; 0.5</strong> → perlu lebih banyak data.
+            </p>
+        </div>
+
+        <div class="rounded-xl bg-slate-800/50 p-4 border border-slate-700/50">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-lg">📊</span>
+                <span class="text-sm font-bold text-yellow-300">Akurasi Kategori</span>
+            </div>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Dari semua tebakan kategori udara (Baik / Sedang / Tidak Sehat / Berbahaya), berapa persen yang benar?
+            </p>
+            <p class="text-xs text-slate-500 mt-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                Bukti visualnya ada di <strong class="text-slate-300">confusion matrix</strong>
+                di folder <code class="font-mono">reports/</code> — bisa dibuka lewat tombol di bawah.
+            </p>
+        </div>
+    </div>
+
+    <!-- Novelty callout -->
+    <div class="mt-4 rounded-xl border border-lime-400/30 bg-lime-950/30 px-4 py-3 flex items-start gap-3">
+        <span class="text-xl mt-0.5">💡</span>
+        <div>
+            <p class="text-sm font-semibold text-lime-300">Kebaruan (Novelty) Penelitian Ini</p>
+            <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                Penelitian ini menambahkan <strong class="text-lime-300">tekanan udara barometrik</strong>
+                dari sensor BME280 sebagai fitur tambahan untuk model prediksi.
+                Variabel ini belum digunakan pada penelitian-penelitian terdahulu di bidang yang sama,
+                sehingga menjadi kontribusi orisinal skripsi ini.
+                Lihat grafik <em>Feature Importance</em> di bawah — batang
+                <span class="text-cyan-300 font-semibold">biru muda (cyan)</span>
+                menunjukkan seberapa besar pengaruh tekanan udara terhadap hasil prediksi.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SECTION 4: BUKTI EVALUASI ===== -->
+{% if report_groups %}
+<div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+    <h2 class="text-base font-bold text-white mb-1">📁 Bukti Evaluasi</h2>
+    <p class="text-xs text-slate-500 mb-4">
+        Gambar &amp; laporan hasil pengujian model — dibuat otomatis saat
+        <code class="bg-slate-900 px-1.5 py-0.5 rounded font-mono text-[11px]">python train_model.py</code>
+        dijalankan · tersimpan di folder <code class="bg-slate-900 px-1.5 py-0.5 rounded font-mono text-[11px]">reports/</code>
+        · klik tombol untuk membuka file.
+    </p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% for g in report_groups %}
+        <div class="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 hover:border-emerald-500/40 transition">
+            <div class="text-xs font-bold text-emerald-300 uppercase tracking-wider mb-0.5">{{ g.title }}</div>
+            <div class="text-xs text-slate-500 mb-3 leading-relaxed">{{ g.desc }}</div>
+            <div class="flex flex-wrap gap-2">
+                {% for f in g.files %}
+                <a href="/reports/{{ f.name }}" target="_blank"
+                   class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-200
+                          bg-slate-700/80 hover:bg-emerald-600 border border-slate-600/60
+                          rounded-lg px-3 py-1.5 transition">
+                    {% if f.name.endswith('.png') %}🖼️ {% else %}📄 {% endif %}
+                    {%- if 'confusion' in f.name -%}Confusion Matrix
+                    {%- elif 'classification' in f.name -%}Classification Report
+                    {%- elif 'actual' in f.name -%}Grafik Aktual vs Prediksi
+                    {%- elif 'feature' in f.name -%}Feature Importance
+                    {%- else -%}Laporan Lengkap
+                    {%- endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card-glass rounded-2xl p-5 mb-6 rise-in">
+    <div class="flex items-start gap-3">
+        <span class="text-2xl">📂</span>
+        <div>
+            <p class="text-sm font-semibold text-slate-200">Belum Ada Bukti Evaluasi</p>
+            <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                Confusion matrix, grafik aktual vs prediksi, dan laporan lengkap akan otomatis muncul
+                di sini setelah Anda menjalankan:
+            </p>
+            <code class="inline-block mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-emerald-300">
+                python train_model.py
+            </code>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== SECTION 5: FEATURE IMPORTANCE ===== -->
+<div id="importance-box" class="card-glass rounded-2xl p-5 rise-in">
+    <h2 class="text-base font-bold text-white mb-1">🌲 Faktor yang Paling Memengaruhi Tebakan PM 2.5</h2>
+    <p class="text-xs text-slate-400 mb-4">
+        Semakin panjang batangnya, semakin besar pengaruh faktor tersebut terhadap hasil prediksi.
+        Batang <span class="text-cyan-300 font-semibold">biru muda (cyan)</span>
+        = tekanan udara barometrik — kebaruan (novelty) penelitian ini.
+    </p>
+    <div class="h-80"><canvas id="chart-importance"></canvas></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const BADGE = {
+        baik:   'bg-green-500/20 text-green-400 border border-green-500/30',
+        cukup:  'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
+        kurang: 'bg-red-500/20 text-red-400 border border-red-500/30'
+    };
+    const LABEL = {
+        baik:   '✓ Tepat',
+        cukup:  '~ Cukup Tepat',
+        kurang: '✗ Perlu Lebih Banyak Data'
+    };
+    const TARGET_LABEL = {
+        'Perkiraan Debu Halus':   'PM 2.5 — Debu Halus',
+        'Perkiraan Debu Kasar':   'PM 10 — Debu Kasar',
+        'Perkiraan Gas Tercemar': 'MQ-135 — Gas Tercemar'
+    };
+
+    async function loadMetrics() {
+        const resp = await fetchJSON('/api/model-metrics');
+        const tbody     = document.getElementById('metrics-tbody');
+        const empty     = document.getElementById('metrics-empty');
+        const infoEl    = document.getElementById('info-trained');
+        const impBox    = document.getElementById('importance-box');
+
+        if (!resp || resp.status === 'no_data' || !resp.metrics || !resp.metrics.length) {
+            tbody.innerHTML = '';
+            empty.classList.remove('hidden');
+            impBox.classList.add('hidden');
+            infoEl.textContent = 'Belum pernah dilatih';
+            return;
+        }
+
+        empty.classList.add('hidden');
+        impBox.classList.remove('hidden');
+        infoEl.textContent = fmtDateTime(resp.trained_at) + ' WIB';
+
+        tbody.innerHTML = resp.metrics.map(m => `
+            <tr class="hover:bg-slate-800/40 transition">
+                <td class="px-5 py-3.5 font-semibold text-slate-100">
+                    ${TARGET_LABEL[m.target_label] || m.target_label}
+                </td>
+                <td class="px-5 py-3.5 font-mono text-slate-200">${m.mae}</td>
+                <td class="px-5 py-3.5 font-mono text-slate-200">${m.rmse}</td>
+                <td class="px-5 py-3.5 font-mono font-bold
+                    ${m.r2 >= 0.85 ? 'text-green-400' : m.r2 >= 0.70 ? 'text-yellow-400' : 'text-red-400'}">
+                    ${m.r2.toFixed(2)}
+                </td>
+                <td class="px-5 py-3.5">
+                    <span class="chip rounded-full px-3 py-1 text-xs font-semibold ${BADGE[m.r2_status]}">
+                        ${LABEL[m.r2_status]}
+                    </span>
+                </td>
+            </tr>`).join('');
+    }
+
+    async function loadImportance() {
+        const resp  = await fetchJSON('/api/feature-importance');
+        const box   = document.getElementById('importance-box');
+        if (!resp || resp.status !== 'ok' || !resp.features || !resp.features.length) {
+            box.classList.add('hidden');
+            return;
+        }
+        box.classList.remove('hidden');
+        const items = resp.features.slice().reverse();
+        new Chart(document.getElementById('chart-importance'), {
+            type: 'bar',
+            data: {
+                labels: items.map(x => x.name),
+                datasets: [{
+                    label: 'Kontribusi terhadap prediksi',
+                    data: items.map(x => x.importance),
+                    backgroundColor: items.map(x =>
+                        x.is_pressure ? 'rgb(34, 211, 238)' : 'rgba(99, 102, 241, 0.75)'),
+                    borderColor: items.map(x =>
+                        x.is_pressure ? 'rgb(34, 211, 238)' : 'rgba(99, 102, 241, 1)'),
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ' Kontribusi: ' + (ctx.raw * 100).toFixed(2) + '%'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { callback: v => (v * 100).toFixed(0) + '%' }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    loadMetrics();
+    loadImportance();
+</script>
+{% endblock %}

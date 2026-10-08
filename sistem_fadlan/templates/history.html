@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Riwayat{% endblock %}
+
+{% block content %}
+<!-- ===== SECTION 1: FILTER ===== -->
+<div class="rounded-2xl card-glass p-4 mb-6 flex flex-col sm:flex-row sm:items-end gap-3">
+    <div class="flex-1">
+        <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Dari</label>
+        <input type="date" id="date-start" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+    </div>
+    <div class="flex-1">
+        <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Sampai</label>
+        <input type="date" id="date-end" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+    </div>
+    <button id="btn-filter" class="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">Tampilkan</button>
+</div>
+
+<!-- ===== SECTION 2: INFO TOTAL + TABEL ===== -->
+<div class="rounded-2xl card-glass overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-300">Catatan lama pembacaan alat</h2>
+        <span id="total-info" class="text-xs text-slate-500">--</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-slate-700 text-slate-200 text-left">
+                    <th class="px-4 py-3">Waktu</th>
+                    <th class="px-4 py-3">PM 1.0</th>
+                    <th class="px-4 py-3">PM 2.5</th>
+                    <th class="px-4 py-3">PM 10</th>
+                    <th class="px-4 py-3">MQ-135</th>
+                    <th class="px-4 py-3">Suhu</th>
+                    <th class="px-4 py-3">Kelembapan</th>
+                    <th class="px-4 py-3">Tekanan</th>
+                </tr>
+            </thead>
+            <tbody id="history-tbody" class="divide-y divide-slate-700"></tbody>
+        </table>
+    </div>
+
+    <!-- ===== SECTION 3: PAGINATION ===== -->
+    <div class="px-5 py-4 border-t border-slate-700 flex items-center justify-between text-sm">
+        <span class="text-slate-400">Halaman <span id="page-now">1</span> / <span id="page-total">1</span></span>
+        <div class="flex gap-2">
+            <button id="btn-prev" class="px-4 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:text-white disabled:opacity-40">← Prev</button>
+            <button id="btn-next" class="px-4 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:text-white disabled:opacity-40">Next →</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const PER_PAGE = 50;
+    let page = 0;
+    let total = 0;
+
+    function pageCount() { return Math.max(1, Math.ceil(total / PER_PAGE)); }
+
+    async function loadPage(p) {
+        page = Math.max(0, p);
+        const start = document.getElementById('date-start').value;
+        const end   = document.getElementById('date-end').value;
+
+        const params = new URLSearchParams({ limit: PER_PAGE, offset: page * PER_PAGE });
+        if (start) params.set('start', start);
+        if (end)   params.set('end', end);
+
+        const resp = await fetchJSON('/api/history?' + params.toString());
+        const tbody = document.getElementById('history-tbody');
+        tbody.innerHTML = '';
+
+        if (!resp || resp.status !== 'ok') {
+            tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">Belum ada data tersedia</td></tr>';
+            total = 0;
+        } else {
+            total = resp.total;
+            if (!resp.data.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">Tidak ada data pada rentang tanggal ini</td></tr>';
+            }
+            for (const r of resp.data) {
+                const over = (r.pm25 > TH_PM25) || (r.pm10 > TH_PM10);
+                const tr = document.createElement('tr');
+                tr.className = over ? 'bg-red-900/20' : 'bg-slate-800/50';
+                tr.innerHTML = `
+                    <td class="px-4 py-2.5 text-slate-300">${fmtDateTime(r.timestamp)}</td>
+                    <td class="px-4 py-2.5">${r.pm1_0 != null ? r.pm1_0 : '--'}</td>
+                    <td class="px-4 py-2.5 font-medium ${r.pm25 > TH_PM25 ? 'text-red-400' : ''}">${r.pm25}</td>
+                    <td class="px-4 py-2.5 font-medium ${r.pm10 > TH_PM10 ? 'text-red-400' : ''}">${r.pm10}</td>
+                    <td class="px-4 py-2.5">${r.gas_raw}</td>
+                    <td class="px-4 py-2.5">${r.temperature}</td>
+                    <td class="px-4 py-2.5">${r.humidity}</td>
+                    <td class="px-4 py-2.5">${r.pressure}</td>`;
+                tbody.appendChild(tr);
+            }
+        }
+
+        document.getElementById('total-info').textContent =
+            `Total ${total} catatan data · ${PER_PAGE}/halaman`;
+        document.getElementById('page-now').textContent = page + 1;
+        document.getElementById('page-total').textContent = pageCount();
+        document.getElementById('btn-prev').disabled = (page === 0);
+        document.getElementById('btn-next').disabled = (page + 1 >= pageCount());
+    }
+
+    document.getElementById('btn-prev').addEventListener('click', () => loadPage(page - 1));
+    document.getElementById('btn-next').addEventListener('click', () => loadPage(page + 1));
+    document.getElementById('btn-filter').addEventListener('click', () => loadPage(0));
+
+    // Default filter: 7 hari terakhir (tanggal lokal)
+    const end = new Date(), start = new Date(Date.now() - 7 * 86400000);
+    const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    document.getElementById('date-start').value = iso(start);
+    document.getElementById('date-end').value = iso(end);
+
+    loadPage(0);
+</script>
+{% endblock %}

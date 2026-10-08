@@ -1,0 +1,20 @@
+# ===== Kebijakan security PRD Section 18 =====
+config.py
+database/
+models/
+reports/
+backups/
+venv/
+.env
+server.log
+docs/_proposal_teks.txt
+
+# ===== Python =====
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

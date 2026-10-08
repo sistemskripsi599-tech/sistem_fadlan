@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Prediksi{% endblock %}
+
+{% block content %}
+<!-- ===== SECTION 1: INFO PREDIKSI ===== -->
+<div class="rounded-2xl card-glass p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+        <div><span class="text-slate-400">Cara menebak:</span> <span class="text-slate-100 font-medium">komputer belajar dari pola angka lama (metode Random Forest)</span></div>
+        <div><span class="text-slate-400">Dibuat:</span> <span id="info-created" class="text-slate-100 font-medium">--</span></div>
+        <div><span class="text-slate-400">Rentang:</span> <span id="info-range" class="text-slate-100 font-medium">--</span></div>
+        <div><span class="text-slate-400">Bahan pertimbangan:</span> <span class="text-slate-100 font-medium">angka 12 pembacaan terakhir + jam + tekanan udara (kebaruan penelitian ini)</span></div>
+    </div>
+    <button id="btn-refresh" class="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-lg px-4 py-2 text-sm transition whitespace-nowrap">
+        🔄 Perbarui Prediksi
+    </button>
+</div>
+
+<!-- ===== INFO BOX: MODEL BELUM SIAP (PRD 17.3) ===== -->
+<div id="model-not-ready" class="hidden rounded-xl border border-amber-500 bg-amber-900/40 p-5 mb-6 text-sm text-amber-100">
+    ℹ️ <strong>Komputer belum diajari.</strong> Jalankan <code class="bg-slate-900 px-2 py-0.5 rounded">python train_model.py</code>
+    satu kali agar ramalan 24 jam bisa muncul.
+</div>
+
+<!-- ===== SECTION 2-4: GRAFIK PREDIKSI ===== -->
+<div id="pred-content" class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="rounded-2xl card-glass p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Ramalan PM 2.5 — garis putus-putus = batas aman</h2>
+        <div class="h-64"><canvas id="chart-pred-pm25"></canvas></div>
+    </div>
+    <div class="rounded-2xl card-glass p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Ramalan PM 10 — garis putus-putus = batas aman</h2>
+        <div class="h-64"><canvas id="chart-pred-pm10"></canvas></div>
+    </div>
+    <div class="rounded-2xl card-glass p-5 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Ramalan MQ-135 — angka pembanding</h2>
+        <div class="h-64"><canvas id="chart-pred-gas"></canvas></div>
+    </div>
+</div>
+
+<!-- ===== SECTION 5: TABEL RINGKASAN 24 BARIS ===== -->
+<div id="pred-table-box" class="rounded-2xl card-glass overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700">
+        <h2 class="text-sm font-semibold text-slate-300">Ramalan per jam, 24 jam ke depan</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Baris merah = diperkirakan melebihi batas aman pemerintah</p>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-slate-700 text-slate-200 text-left">
+                    <th class="px-4 py-3">Berapa jam lagi</th>
+                    <th class="px-4 py-3">Pukul</th>
+                    <th class="px-4 py-3">PM 2.5 (perkiraan)</th>
+                    <th class="px-4 py-3">PM 10 (perkiraan)</th>
+                    <th class="px-4 py-3">MQ-135 (perkiraan)</th>
+                    <th class="px-4 py-3">Perkiraan Udara</th>
+                </tr>
+            </thead>
+            <tbody id="pred-tbody" class="divide-y divide-slate-700"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const chPM25 = new Chart(document.getElementById('chart-pred-pm25'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+    const chPM10 = new Chart(document.getElementById('chart-pred-pm10'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+    const chGas  = new Chart(document.getElementById('chart-pred-gas'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+
+    function resetAll() {
+        [chPM25, chPM10, chGas].forEach(c => { c.data = { labels: [], datasets: [] }; c.update(); });
+        document.getElementById('pred-tbody').innerHTML =
+            '<tr><td colspan="6" class="px-4 py-10 text-center text-slate-500">Belum ada prediksi tersedia</td></tr>';
+        document.getElementById('info-created').textContent = '--';
+        document.getElementById('info-range').textContent = '--';
+    }
+
+    async function loadPrediction() {
+        const resp = await fetchJSON('/api/predict');
+        const notReady = document.getElementById('model-not-ready');
+        const hasContent = document.getElementById('pred-content');
+        const tableBox = document.getElementById('pred-table-box');
+
+        if (!resp || resp.status !== 'ok' || !resp.predictions.length) {
+            // PRD 17.2: model_not_ready vs no_data
+            const isModel = resp && resp.status === 'model_not_ready';
+            notReady.classList.toggle('hidden', !isModel);
+            hasContent.classList.add('hidden');
+            tableBox.classList.add('hidden');
+            resetAll();
+            return;
+        }
+        notReady.classList.add('hidden');
+        hasContent.classList.remove('hidden');
+        tableBox.classList.remove('hidden');
+
+        const preds = resp.predictions;
+        const labels = preds.map(p => fmtTime(p.target_hour));
+        const pm25 = preds.map(p => p.pm25_pred);
+        const pm10 = preds.map(p => p.pm10_pred);
+        const gas  = preds.map(p => p.gas_pred);
+
+        const mk = (data, color, fill) => ({
+            data: data, borderColor: color, backgroundColor: fill,
+            fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2
+        });
+
+        chPM25.data = { labels, datasets: [mk(pm25, 'rgb(34, 211, 238)', 'rgba(34, 211, 238, 0.15)'), thresholdDataset('Batas 55', TH_PM25, 'rgb(239, 68, 68)', 24)] };
+        chPM25.update();
+        chPM10.data = { labels, datasets: [mk(pm10, 'rgb(59, 130, 246)', 'rgba(59, 130, 246, 0.15)'), thresholdDataset('Batas 75', TH_PM10, 'rgb(251, 146, 60)', 24)] };
+        chPM10.update();
+        chGas.data  = { labels, datasets: [mk(gas, 'rgb(251, 146, 60)', 'rgba(251, 146, 60, 0.15)')] };
+        chGas.update();
+
+        // Info box
+        document.getElementById('info-created').textContent = fmtDateTime(resp.generated_at) + ' WIB';
+        const first = new Date(preds[0].target_hour), last = new Date(preds[preds.length - 1].target_hour);
+        document.getElementById('info-range').textContent =
+            fmtTime(first) + ' – ' + fmtDateTime(last) + ' WIB';
+
+        // Tabel 24 baris
+        const tbody = document.getElementById('pred-tbody');
+        tbody.innerHTML = '';
+        preds.forEach((p, i) => {
+            const over = (p.pm25_pred > TH_PM25) || (p.pm10_pred > TH_PM10);
+            const st = aqStatus(p.pm25_pred, p.pm10_pred);
+            const tr = document.createElement('tr');
+            tr.className = over ? 'bg-red-900/30' : 'bg-slate-800/50';
+            tr.innerHTML = `
+                <td class="px-4 py-2.5 text-slate-400">${i + 1} jam lagi</td>
+                <td class="px-4 py-2.5">${fmtTime(p.target_hour)} WIB</td>
+                <td class="px-4 py-2.5 font-medium">${p.pm25_pred.toFixed(1)}</td>
+                <td class="px-4 py-2.5 font-medium">${p.pm10_pred.toFixed(1)}</td>
+                <td class="px-4 py-2.5">${Math.round(p.gas_pred)}</td>
+                <td class="px-4 py-2.5"><span class="rounded-full px-3 py-1 text-xs font-semibold ${st.cls}">● ${st.label}</span></td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', loadPrediction);
+    loadPrediction();
+    setInterval(loadPrediction, 300000);   // prediksi refresh tiap 5 menit
+</script>
+{% endblock %}

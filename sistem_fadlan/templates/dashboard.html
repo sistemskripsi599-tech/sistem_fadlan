@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- ===== SECTION 1: STATUS BAR (glass) ===== -->
+<div class="card-glass rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 rise-in">
+    <div class="text-sm text-slate-400">
+        🕐 Pembacaan terakhir: <span id="last-update" class="text-slate-200 font-medium">--</span>
+    </div>
+    <div class="flex items-center gap-5 text-sm">
+        <span class="text-slate-400">Udara hari ini:
+            <span id="badge-status" class="chip ml-1 inline-block rounded-full px-3 py-1 text-xs font-semibold bg-slate-700/60 text-slate-400">--</span>
+        </span>
+        <span class="text-slate-400">Alat:
+            <span id="sensor-state" class="ml-1 text-slate-500 font-semibold">--</span>
+        </span>
+    </div>
+</div>
+
+<!-- ===== SECTION 2: HEADER ===== -->
+<div class="flex items-center justify-between mb-4 rise-in">
+    <h1 class="text-2xl font-bold text-white">Kondisi Udara Hari Ini</h1>
+    <span class="text-xs text-slate-500 hidden sm:block">Lokasi: Kelurahan Buluri, Kota Palu</span>
+</div>
+
+<div id="alert-banner" class="hidden rounded-2xl border border-red-500/70 bg-red-950/60 backdrop-blur p-4 mb-6 text-sm text-red-100"></div>
+
+<!-- ⏰ PERINGATAN DINI DARI RAMALAN (fitur: prediksi 24 jam dijadikan peringatan) -->
+<div id="forecast-alert" class="hidden rounded-2xl border border-amber-500/70 bg-amber-950/60 backdrop-blur p-4 mb-6 text-sm text-amber-100"></div>
+
+<!-- ===== SECTION 3: HERO PM 2.5 + GRID 6 KARTU ===== -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+    <!-- HERO: PM 2.5 (parameter utama) -->
+    <div id="hero-pm25" class="card-glass hero-glow rounded-2xl p-6 lg:row-span-2 flex flex-col items-center justify-center text-center relative overflow-hidden">
+        <div class="absolute top-4 left-5 text-xs font-medium text-slate-400 uppercase tracking-widest">PM 2.5 · Debu Halus</div>
+        <div class="absolute top-4 right-5 text-lg">🌫️</div>
+
+        <!-- Ring gauge -->
+        <div class="relative w-44 h-44 mt-8 mb-2">
+            <svg viewBox="0 0 120 120" class="w-full h-full -rotate-90">
+                <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(148,163,184,0.15)" stroke-width="9"/>
+                <circle id="ring-pm25" cx="60" cy="60" r="54" fill="none"
+                        stroke="#22c55e" stroke-width="9" stroke-linecap="round"
+                        stroke-dasharray="339.29" stroke-dashoffset="339.29"
+                        style="transition: stroke-dashoffset .9s ease, stroke .5s ease;"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <div id="card-pm25" class="num text-5xl font-bold text-white">--</div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-wider mt-1">μg/m³</div>
+            </div>
+        </div>
+
+        <span id="badge-pm25" class="chip rounded-full px-4 py-1.5 text-xs font-semibold bg-slate-700/60 text-slate-400">--</span>
+        <p class="mt-3 text-xs text-slate-500 max-w-[16rem]">debu sangat kecil dari asap kendaraan — paling berbahaya bagi paru-paru; batas aman pemerintah 55 μg/m³ (PP No. 22/2021)</p>
+    </div>
+
+    <!-- PM 1.0 -->
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-widest">PM 1.0</span>
+            <span class="text-lg">✨</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-pm1">--</div>
+        <div class="text-[11px] text-slate-500">μg/m³ — debu paling halus, lebih kecil dari PM2.5</div>
+        <div class="mt-3"><span class="chip rounded-full px-3 py-1 text-[11px] font-semibold bg-slate-700/60 text-slate-400">pemantauan saja</span></div>
+    </div>
+
+    <!-- PM 10 -->
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-widest">PM 10</span>
+            <span class="text-lg">🌪️</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-pm10">--</div>
+        <div class="text-[11px] text-slate-500">μg/m³ — Debu Kasar: debu jalan &amp; konstruksi</div>
+        <div class="mt-3"><span id="badge-pm10" class="chip rounded-full px-3 py-1 text-[11px] font-semibold bg-slate-700/60 text-slate-400">--</span></div>
+    </div>
+
+    <!-- MQ-135 -->
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-widest">MQ-135</span>
+            <span class="text-lg">🧪</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-gas">--</div>
+        <div class="text-[11px] text-slate-500">angka pembanding — Gas Tercemar: asap knalpot &amp; bau gas</div>
+        <div class="mt-3"><span class="chip rounded-full px-3 py-1 text-[11px] font-semibold bg-slate-700/60 text-slate-400">pemantauan saja</span></div>
+    </div>
+
+    <!-- Suhu -->
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-widest">Suhu</span>
+            <span class="text-lg">🌡️</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-temp">--</div>
+        <div class="text-[11px] text-slate-500">derajat Celsius — dari sensor BME280</div>
+    </div>
+
+    <!-- Kelembapan -->
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-widest">Kelembapan</span>
+            <span class="text-lg">💧</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-hum">--</div>
+        <div class="text-[11px] text-slate-500">persen lembap udara — dari sensor BME280</div>
+    </div>
+
+    <!-- Tekanan (novelty) -->
+    <div class="card-glass rounded-2xl p-5 border-lime-400/40 hover:border-lime-300/60 transition rise-in">
+        <div class="flex items-start justify-between">
+            <span class="text-xs font-medium text-lime-300/90 uppercase tracking-widest">Tekanan Udara ✦</span>
+            <span class="text-lg">🔵</span>
+        </div>
+        <div class="mt-2 text-3xl font-bold text-white num" id="card-press">--</div>
+        <div class="text-[11px] text-slate-500">hektopascal — khas penelitian ini, meningkatkan ketepatan ramalan</div>
+    </div>
+</div>
+
+<!-- 💡 SARAN UNTUK HARI INI (manfaat aplikatif proposal 1.5.2) -->
+<div id="advice-card" class="hidden card-glass rounded-2xl p-5 mb-6 rise-in">
+    <h2 class="text-sm font-semibold text-slate-300 mb-1">💡 Saran untuk Hari Ini</h2>
+    <p id="advice-text" class="text-sm text-slate-300 leading-relaxed">--</p>
+    <p class="text-[11px] text-slate-500 mt-2">dibuat otomatis dari status udara saat ini — bukan nasihat medis</p>
+</div>
+
+<!-- ===== SECTION 4: GRAFIK 60 MENIT ===== -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="card-glass rounded-2xl p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Perjalanan PM 2.5 — 1 jam terakhir</h2>
+        <div class="h-44"><canvas id="spark-pm25"></canvas></div>
+    </div>
+    <div class="card-glass rounded-2xl p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Perjalanan PM 10 — 1 jam terakhir</h2>
+        <div class="h-44"><canvas id="spark-pm10"></canvas></div>
+    </div>
+</div>
+
+<!-- ===== SECTION 5: RAMALAN ===== -->
+<h2 class="text-lg font-bold text-white mb-1">Ramalan Udara ke Depan</h2>
+<p class="text-xs text-slate-500 mb-3">tebakan komputer berdasarkan pola angka-angka sebelumnya (Random Forest)</p>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-widest">1 jam lagi</div>
+        <div class="mt-1 text-2xl font-bold text-emerald-300 num" id="pred-1">--</div>
+        <div class="text-xs text-slate-500">PM 2.5 (μg/m³)</div>
+    </div>
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-widest">6 jam lagi</div>
+        <div class="mt-1 text-2xl font-bold text-emerald-300 num" id="pred-6">--</div>
+        <div class="text-xs text-slate-500">PM 2.5 (μg/m³)</div>
+    </div>
+    <div class="card-glass rounded-2xl p-5 hover:border-emerald-500/40 transition">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-widest">12 jam lagi</div>
+        <div class="mt-1 text-2xl font-bold text-emerald-300 num" id="pred-12">--</div>
+        <div class="text-xs text-slate-500">PM 2.5 (μg/m³)</div>
+    </div>
+</div>
+
+<div class="text-right">
+    <a href="/prediction" class="inline-block bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/25 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition">
+        → Lihat Ramalan Lengkap 24 Jam
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const sparkPM25 = new Chart(document.getElementById('spark-pm25'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+    const sparkPM10 = new Chart(document.getElementById('spark-pm10'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+
+    // ---- Warna & glow sesuai 4 kategori ----
+    const STATUS_COLOR = { 'BAIK': '#22c55e', 'SEDANG': '#eab308', 'TIDAK SEHAT': '#f97316', 'BERBAHAYA': '#ef4444' };
+    const STATUS_GLOW  = { 'BAIK': '0 0 44px rgba(34,197,94,.25)', 'SEDANG': '0 0 44px rgba(234,179,8,.22)',
+                           'TIDAK SEHAT': '0 0 44px rgba(249,115,22,.25)', 'BERBAHAYA': '0 0 52px rgba(239,68,68,.3)' };
+
+    // Angka berjalan naik/turun (count-up) pada hero
+    function countUp(el, target, decimals = 1, ms = 700) {
+        const start = parseFloat((el.textContent || '0').replace('--', '0')) || 0;
+        const t0 = performance.now();
+        function frame(now) {
+            const k = Math.min(1, (now - t0) / ms);
+            const eased = 1 - Math.pow(1 - k, 3);
+            el.textContent = (start + (target - start) * eased).toFixed(decimals);
+            if (k < 1) requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+    }
+
+    function setHero(pm25) {
+        if (pm25 == null || isNaN(pm25)) return;
+        countUp(document.getElementById('card-pm25'), pm25);
+
+        const st = aqStatus(pm25, null);
+        const color = STATUS_COLOR[st.label] || '#22c55e';
+        const CIRC = 339.29;
+        const pct = Math.min(pm25 / 150.4, 1);          // skala gauge 0–150.4 (puncak TIDAK SEHAT)
+        document.getElementById('ring-pm25').style.strokeDashoffset = (CIRC * (1 - pct)).toFixed(1);
+        document.getElementById('ring-pm25').style.stroke = color;
+        const hero = document.getElementById('hero-pm25');
+        hero.style.borderColor = color + '66';
+        hero.style.boxShadow = STATUS_GLOW[st.label] || 'none';
+    }
+
+    async function loadRealtime() {
+        const resp = await fetchJSON('/api/realtime');
+        if (!resp) return;
+
+        if (resp.status === 'no_data') {
+            ['pm1','pm25','pm10','gas','temp','hum','press'].forEach(k => setCard('card-' + k, null));
+            document.getElementById('sensor-state').textContent = 'Menunggu alat...';
+            return;
+        }
+        const d = resp.data;
+        setCard('card-pm1',  d.pm1_0);
+        setCard('card-pm10', d.pm10);
+        setCard('card-gas',  d.gas_raw, 0);
+        setCard('card-temp', d.temperature);
+        setCard('card-hum',  d.humidity);
+        setCard('card-press',d.pressure);
+        setHero(d.pm25);
+        buildAdvice(d.pm25, d.pm10);
+        setBadge('badge-status', d.pm25, d.pm10);
+        setBadge('badge-pm25', d.pm25);
+        setBadge('badge-pm10', null, d.pm10);
+        document.getElementById('sensor-state').textContent = '● Menyala';
+        document.getElementById('last-update').textContent =
+            fmtDateTime(d.timestamp) + ' WIB';
+
+        const banner = document.getElementById('alert-banner');
+        const warns = [];
+        if (d.pm25 > TH_PM25) warns.push(`PM 2.5 sekarang ${d.pm25.toFixed(1)} μg/m³ — MELEBIHI batas aman pemerintah ${TH_PM25.toFixed(1)} (PP No. 22/2021)`);
+        if (d.pm10 > TH_PM10) warns.push(`PM 10 sekarang ${d.pm10.toFixed(1)} μg/m³ — MELEBIHI batas aman pemerintah ${TH_PM10.toFixed(1)} (PP No. 22/2021)`);
+        if (warns.length) {
+            banner.innerHTML = '⚠️ <strong>' + warns.join('</strong><br>⚠️ <strong>') + '</strong>. ' +
+                '<a href="/prediction" class="underline text-red-300 hover:text-red-200 ml-1">Cek ramalan ke depan →</a>';
+            banner.classList.remove('hidden');
+        } else {
+            banner.classList.add('hidden');
+        }
+    }
+
+    async function loadCharts() {
+        const resp = await fetchJSON('/api/chart-data?limit=120');
+        if (!resp || resp.status === 'no_data' || !resp.data.length) {
+            toggleChartEmpty('spark-pm25', true, 'Belum ada catatan — alat belum mengirim angka');
+            toggleChartEmpty('spark-pm10', true, 'Belum ada catatan — alat belum mengirim angka');
+            return;
+        }
+        const labels = resp.data.map(r => fmtTime(r.timestamp));
+        sparkPM25.data = {
+            labels: labels,
+            datasets: [{ data: resp.data.map(r => r.pm25), borderColor: 'rgb(52, 211, 153)',
+                         backgroundColor: 'rgba(52, 211, 153, 0.12)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 }]
+        };
+        sparkPM25.update();
+        sparkPM10.data = {
+            labels: labels,
+            datasets: [{ data: resp.data.map(r => r.pm10), borderColor: 'rgb(59, 130, 246)',
+                         backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 }]
+        };
+        sparkPM10.update();
+        toggleChartEmpty('spark-pm25', false);
+        toggleChartEmpty('spark-pm10', false);
+    }
+
+    // 💡 Saran harian otomatis dari status gabungan (bahasa awam)
+    function buildAdvice(pm25, pm10) {
+        const st = aqStatus(pm25, pm10);
+        const map = {
+            'BAIK':        '🌿 Udara <strong>BAIK</strong> — aktivitas di luar ruangan aman untuk semua kalangan. Nikmati hari ini!',
+            'SEDANG':      '🟡 Udara <strong>SEDANG</strong> — masih aman untuk aktivitas biasa. Penderita asma & lansia sebaiknya tidak terlalu lama beraktivitas berat di luar.',
+            'TIDAK SEHAT': '🟠 Udara <strong>TIDAK SEHAT</strong> — pakai masker saat keluar rumah, kurangi olahraga luar ruangan, dan tutup ventilasi bila memungkinkan.',
+            'BERBAHAYA':   '🔴 Udara <strong>BERBAHAYA</strong> — sebisa mungkin tetap di dalam ruangan. Wajib masker bila keluar; penderita penyakit pernapasan harap ekstra waspada.'
+        };
+        document.getElementById('advice-text').innerHTML = map[st.label] || '--';
+        document.getElementById('advice-card').classList.remove('hidden');
+    }
+
+    // ⏰ Peringatan dini dari ramalan: baca 24 prediksi ke depan,
+    // cari jam PERTAMA yang diperkirakan menembus ambang → beri tahu sejak sekarang.
+    function checkForecastAlert(preds) {
+        const box = document.getElementById('forecast-alert');
+        if (!preds || !preds.length) { box.classList.add('hidden'); return; }
+        for (let i = 0; i < preds.length; i++) {
+            const p = preds[i];
+            const hit = [];
+            if (p.pm25_pred > TH_PM25) hit.push(`PM 2.5 ± ${p.pm25_pred.toFixed(1)} μg/m³ (${Math.round(p.pm25_pred / TH_PM25 * 100)}% batas)`);
+            if (p.pm10_pred > TH_PM10) hit.push(`PM 10 ± ${p.pm10_pred.toFixed(1)} μg/m³ (${Math.round(p.pm10_pred / TH_PM10 * 100)}% batas)`);
+            if (hit.length) {
+                const jam = new Date(p.target_hour).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                box.innerHTML =
+                    '⏰ <strong>Peringatan Dini dari Ramalan (24 jam ke depan)</strong><br>' +
+                    `Diperkirakan pukul <strong>${jam} WITA</strong> (${i + 1} jam lagi) udara akan melewati batas aman: ${hit.join(' & ')}. ` +
+                    'Siapkan langkah antisipasi — <a href="/prediction" class="underline text-amber-300 hover:text-amber-200">lihat ramalan lengkap →</a>';
+                box.classList.remove('hidden');
+                return;
+            }
+        }
+        box.classList.add('hidden');   // seluruh 24 jam diperkirakan aman
+    }
+
+    async function loadPredictions() {
+        const resp = await fetchJSON('/api/predict');
+        const ids = ['pred-1', 'pred-6', 'pred-12'];
+        if (!resp || resp.status !== 'ok' || !resp.predictions.length) {
+            ids.forEach(id => document.getElementById(id).textContent = '--');
+            document.getElementById('forecast-alert').classList.add('hidden');
+            return;
+        }
+        const p = resp.predictions;
+        document.getElementById('pred-1').textContent  = p[0].pm25_pred.toFixed(1);
+        document.getElementById('pred-6').textContent  = p[5].pm25_pred.toFixed(1);
+        document.getElementById('pred-12').textContent = p[11].pm25_pred.toFixed(1);
+        checkForecastAlert(p);
+    }
+
+    loadRealtime(); loadCharts(); loadPredictions();
+    setInterval(loadRealtime, 30000);
+    setInterval(loadCharts, 30000);
+</script>
+{% endblock %}

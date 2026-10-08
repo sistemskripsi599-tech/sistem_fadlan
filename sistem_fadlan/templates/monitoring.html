@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Monitoring{% endblock %}
+
+{% block content %}
+<!-- ===== SECTION 1: HEADER + KONTROL RENTANG ===== -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+    <h1 class="text-2xl font-bold text-slate-100">Pemantauan Langsung</h1>
+    <span class="text-xs text-slate-500 hidden sm:block">angka bergerak sendiri tiap 30 detik saat alat mengirim data</span>
+    <div class="flex items-center gap-2">
+        <span id="record-count" class="text-xs text-slate-500 mr-2">--</span>
+        <div class="flex rounded-lg overflow-hidden border border-slate-700">
+            <button data-range="1H"  class="range-btn px-3 py-1.5 text-xs font-semibold">1 Jam</button>
+            <button data-range="6H"  class="range-btn px-3 py-1.5 text-xs font-semibold">6 Jam</button>
+            <button data-range="12H" class="range-btn px-3 py-1.5 text-xs font-semibold">12 Jam</button>
+            <button data-range="24H" class="range-btn px-3 py-1.5 text-xs font-semibold">24 Jam</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SECTION 2: GRAFIK PM PARTIKULAT ===== -->
+<div class="card-glass rounded-2xl p-5 mb-6">
+    <h2 class="text-sm font-semibold text-slate-300 mb-3">PM 2.5, PM 10 &amp; PM 1.0 — garis putus-putus = batas aman pemerintah</h2>
+    <div class="h-72"><canvas id="chart-pm"></canvas></div>
+</div>
+
+<!-- ===== SECTION 3: GRAFIK GAS ===== -->
+<div class="card-glass rounded-2xl p-5 mb-6">
+    <h2 class="text-sm font-semibold text-slate-300 mb-3">MQ-135 — angka pembanding, hanya dipantau</h2>
+    <div class="h-64"><canvas id="chart-gas"></canvas></div>
+</div>
+
+<!-- ===== SECTION 4: GRAFIK CUACA ===== -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="card-glass rounded-2xl p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Suhu &amp; Kelembapan Udara</h2>
+        <div class="h-64"><canvas id="chart-temp-hum"></canvas></div>
+    </div>
+    <div class="card-glass rounded-2xl p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Tekanan Udara</h2>
+        <div class="h-64"><canvas id="chart-press"></canvas></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Rentang waktu → jumlah record (data per 30 detik, PRD Section 1.5)
+    const RANGES = {
+        '1H':  120,   // 1 jam × 120/h
+        '6H':  720,
+        '12H': 1440,
+        '24H': 2880
+    };
+    const API_CAP = 500;  // batas limit API
+
+    const chartPM = new Chart(document.getElementById('chart-pm'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts() });
+    const chartGas = new Chart(document.getElementById('chart-gas'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+    const chartTempHum = new Chart(document.getElementById('chart-temp-hum'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                y:  { position: 'left',  grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Suhu (°C)' } },
+                y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Kelembapan (%)' } }
+            }
+        }) });
+    const chartPress = new Chart(document.getElementById('chart-press'),
+        { type: 'line', data: { labels: [], datasets: [] }, options: baseLineOpts({ plugins: { legend: { display: false } } }) });
+
+    const CHARTS = [chartPM, chartGas, chartTempHum, chartPress];
+    const IDS = ['chart-pm', 'chart-gas', 'chart-temp-hum', 'chart-press'];
+
+    // ---- Muat data dari API ----
+    async function loadRange(key) {
+        const limit = Math.min(RANGES[key] || 720, API_CAP);
+        const resp = await fetchJSON('/api/chart-data?limit=' + limit);
+
+        if (!resp || resp.status === 'no_data' || !resp.data.length) {
+            CHARTS.forEach((c, i) => {
+                c.data = { labels: [], datasets: [] }; c.update();
+                toggleChartEmpty(IDS[i], true, 'Belum ada data — menunggu sensor...');
+            });
+            document.getElementById('record-count').textContent = 'belum ada catatan';
+            return;
+        }
+
+        const rows  = resp.data;
+        const labels = rows.map(r => fmtTime(r.timestamp));
+        const pm25  = rows.map(r => r.pm25);
+        const pm10  = rows.map(r => r.pm10);
+        const pm1   = rows.map(r => r.pm1_0);
+        const gas   = rows.map(r => r.gas_raw);
+        const temp  = rows.map(r => r.temperature);
+        const hum   = rows.map(r => r.humidity);
+        const press = rows.map(r => r.pressure);
+        const n = rows.length;
+
+        chartPM.data = { labels, datasets: [
+            { label: 'PM 2.5', data: pm25, borderColor: 'rgb(34, 211, 238)', backgroundColor: 'rgba(34, 211, 238, 0.1)', tension: 0.3, pointRadius: 0, borderWidth: 2 },
+            { label: 'PM 10',  data: pm10, borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3, pointRadius: 0, borderWidth: 2 },
+            { label: 'PM 1.0', data: pm1,  borderColor: 'rgb(45, 212, 191)', backgroundColor: 'rgba(45, 212, 191, 0.1)', tension: 0.3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+            thresholdDataset('Batas aman PM2.5 (55)', TH_PM25, 'rgb(239, 68, 68)', n),
+            thresholdDataset('Batas aman PM10 (75)',  TH_PM10, 'rgb(251, 146, 60)', n)
+        ]};
+        chartPM.update();
+
+        chartGas.data = { labels, datasets: [
+            { label: 'MQ-135', data: gas, borderColor: 'rgb(251, 146, 60)', backgroundColor: 'rgba(251, 146, 60, 0.1)', tension: 0.3, pointRadius: 0, borderWidth: 2 }
+        ]};
+        chartGas.update();
+
+        chartTempHum.data = { labels, datasets: [
+            { label: 'Suhu',       data: temp, yAxisID: 'y',  borderColor: 'rgb(248, 113, 113)', tension: 0.3, pointRadius: 0, borderWidth: 2 },
+            { label: 'Kelembapan', data: hum,  yAxisID: 'y1', borderColor: 'rgb(147, 197, 253)', tension: 0.3, pointRadius: 0, borderWidth: 2 }
+        ]};
+        chartTempHum.update();
+
+        chartPress.data = { labels, datasets: [
+            { label: 'Tekanan', data: press, borderColor: 'rgb(167, 139, 250)', backgroundColor: 'rgba(167, 139, 250, 0.1)', tension: 0.3, pointRadius: 0, borderWidth: 2 }
+        ]};
+        chartPress.update();
+
+        CHARTS.forEach((c, i) => toggleChartEmpty(IDS[i], false));
+        document.getElementById('record-count').textContent =
+            n + ' catatan data · rentang ' + key;
+    }
+
+    // ---- Event tombol rentang ----
+    const btnActive = 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25';
+    const btnInactive = 'text-slate-300 hover:text-white';
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.range-btn').forEach(b =>
+                b.className = 'range-btn px-3 py-1.5 text-xs font-semibold ' + btnInactive);
+            btn.className = 'range-btn px-3 py-1.5 text-xs font-semibold ' + btnActive;
+            loadRange(btn.dataset.range);
+        });
+    });
+
+    // Default: 6 Jam, auto-refresh 30 detik
+    document.querySelector('.range-btn[data-range="6H"]').click();
+    let currentRange = '6H';
+    document.querySelectorAll('.range-btn').forEach(b =>
+        b.addEventListener('click', () => currentRange = b.dataset.range));
+    setInterval(() => loadRange(currentRange), 30000);
+</script>
+{% endblock %}
